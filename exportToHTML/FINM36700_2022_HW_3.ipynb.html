@@ -1,0 +1,324 @@
+<html>
+<head>
+<title>FINM36700_2022_HW_3.ipynb</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+FINM36700_2022_HW_3.ipynb</font>
+</center></td></tr></table>
+<pre><span class="s0">#%% md 
+</span><span class="s1"># Homework #3B 
+### Team A 22 
+## Import 
+</span><span class="s0">#%% 
+</span><span class="s2">import </span><span class="s1">pandas </span><span class="s2">as </span><span class="s1">pd</span>
+<span class="s2">import </span><span class="s1">numpy </span><span class="s2">as </span><span class="s1">np</span>
+<span class="s2">import </span><span class="s1">matplotlib.pyplot </span><span class="s2">as </span><span class="s1">plt</span>
+<span class="s2">import </span><span class="s1">statsmodels </span><span class="s2">as </span><span class="s1">sm</span>
+<span class="s2">from </span><span class="s1">arch </span><span class="s2">import </span><span class="s1">arch_model</span>
+<span class="s2">from </span><span class="s1">arch.univariate </span><span class="s2">import </span><span class="s1">GARCH</span><span class="s2">, </span><span class="s1">EWMAVariance</span>
+<span class="s2">import </span><span class="s1">scipy.stats </span><span class="s2">as </span><span class="s1">stats</span>
+<span class="s2">from </span><span class="s1">statsmodels.regression.rolling </span><span class="s2">import </span><span class="s1">RollingOLS</span>
+<span class="s2">import </span><span class="s1">seaborn </span><span class="s2">as </span><span class="s1">sns</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+<span class="s1">warnings.filterwarnings(</span><span class="s3">&quot;ignore&quot;</span><span class="s1">)</span>
+<span class="s1">pd.set_option(</span><span class="s3">&quot;display.precision&quot;</span><span class="s2">, </span><span class="s4">4</span><span class="s1">)</span>
+<span class="s0">#%% md 
+</span><span class="s1">## Data 
+</span><span class="s0">#%% 
+</span><span class="s1">df = pd.read_excel(</span><span class="s3">'../data/barnstable_analysis_data.xlsx'</span><span class="s2">, </span><span class="s1">sheet_name = </span><span class="s4">1</span><span class="s1">)</span>
+<span class="s1">df = df.set_index(</span><span class="s3">'date'</span><span class="s1">)</span>
+<span class="s0">#%% md 
+</span><span class="s1">## 1.     Modeling Volatility and VaR 
+</span><span class="s0">#%% 
+</span><span class="s1">df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">] = df[</span><span class="s3">'SPX'</span><span class="s1">] - df[</span><span class="s3">'TB1M'</span><span class="s1">]</span>
+<span class="s1">df.dropna(inplace = </span><span class="s2">True</span><span class="s1">)</span>
+<span class="s0">#%% md 
+</span><span class="s1">### 1. Historic VaR 
+#### (a) 
+</span><span class="s0">#%% 
+</span><span class="s1">historic_VaR = df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">].shift().expanding(min_periods = </span><span class="s4">60</span><span class="s1">).quantile(</span><span class="s4">.05</span><span class="s1">)</span>
+<span class="s1">historic_VaR.plot()</span>
+
+<span class="s1">plt.title(</span><span class="s3">'SPY Historic .05 VaR'</span><span class="s1">)</span>
+<span class="s1">plt.ylabel(</span><span class="s3">'VaR'</span><span class="s1">)</span>
+<span class="s1">plt.xlabel(</span><span class="s3">'Date'</span><span class="s1">)</span>
+<span class="s1">plt.show()</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (b) 
+</span><span class="s0">#%% 
+</span><span class="s1">round(len(df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">][df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">] &lt; historic_VaR]) / len(historic_VaR.dropna())</span><span class="s2">, </span><span class="s4">5</span><span class="s1">)</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (c) 
+- The violation rate is just above 3% while it should be 5% as specified by the VaR confidence level 
+- Estimating VaR through historic simulation seems to underestimate extreme returns. 
+- Smoother tail of the Historic VaR would lead to a more accurate estimation 
+</span><span class="s0">#%% md 
+</span><span class="s1">### 2 
+#### (a) 
+</span><span class="s0">#%% 
+# Expanding Windows</span>
+<span class="s1">stdev = np.sqrt((df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">]**</span><span class="s4">2</span><span class="s1">).shift(</span><span class="s4">1</span><span class="s1">).expanding(</span><span class="s4">60</span><span class="s1">).mean().to_frame(</span><span class="s3">'Expanding Window'</span><span class="s1">))</span>
+<span class="s0"># Rolling Window</span>
+<span class="s1">stdev[</span><span class="s3">'Rolling Window'</span><span class="s1">] = np.sqrt((df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">]**</span><span class="s4">2</span><span class="s1">).shift(</span><span class="s4">1</span><span class="s1">).rolling(</span><span class="s4">60</span><span class="s1">). mean())</span>
+<span class="s0"># plot</span>
+<span class="s1">stdev.dropna(inplace = </span><span class="s2">True</span><span class="s1">)</span>
+
+<span class="s1">stdev.plot()</span>
+
+<span class="s1">plt.title(</span><span class="s3">'Volatility Forecasts'</span><span class="s1">)</span>
+<span class="s1">plt.ylabel(</span><span class="s3">r'$\sigma_{t}$'</span><span class="s1">)</span>
+<span class="s1">plt.xlabel(</span><span class="s3">'Date'</span><span class="s1">)</span>
+<span class="s1">plt.show()</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (b) 
+</span><span class="s0">#%% 
+</span><span class="s1">VaR = -</span><span class="s4">1.65 </span><span class="s1">* stdev</span>
+<span class="s1">VaR.head()</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (c) 
+</span><span class="s0">#%% 
+</span><span class="s1">freq_df = pd.DataFrame(index = [</span><span class="s3">'Frequency'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">columns = VaR.columns)</span>
+
+<span class="s2">for </span><span class="s1">col </span><span class="s2">in </span><span class="s1">freq_df:</span>
+    <span class="s1">freq_df[col] = len(VaR[df.loc[VaR.index</span><span class="s2">, </span><span class="s3">r'$\tilde{r}$'</span><span class="s1">] &lt; VaR[col]]) / len(VaR[col].dropna().index)</span>
+
+<span class="s1">round(freq_df</span><span class="s2">, </span><span class="s4">5</span><span class="s1">)</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (d) 
+- The Rolling Window seems to result in a higher violation frequency than the expanding window method 
+- The Rolling Window, which looks at the only 60 most recent excess returns, seems to be closer to the expected violation rate of 5% (4.96%) 
+- The expanding series method seems to result in a more conservative VaR than the historic simulation's. 
+- The rolling window method seems to result in a less conservative VaR than the historic simulation's. 
+</span><span class="s0">#%% md 
+</span><span class="s1">### 3 
+</span><span class="s0">#%% 
+</span><span class="s2">def </span><span class="s1">calc_cdf(data</span><span class="s2">, </span><span class="s1">normal = </span><span class="s2">False, </span><span class="s1">sigma = </span><span class="s4">0</span><span class="s1">):</span>
+    <span class="s2">if </span><span class="s1">normal:</span>
+        <span class="s1">threshold = -</span><span class="s4">1.65 </span><span class="s1">* stdev</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">threshold = data.quantile(</span><span class="s4">.05</span><span class="s1">)</span>
+
+    <span class="s2">return </span><span class="s1">data[data &lt; threshold].mean()</span>
+<span class="s0">#%% md 
+</span><span class="s1">- Empirical CDF 
+ 
+#### (a) 
+</span><span class="s0">#%% 
+# empirical cdf</span>
+<span class="s1">historic_CVaR = df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">].shift().expanding(min_periods = </span><span class="s4">60</span><span class="s1">).apply(calc_cdf)</span>
+<span class="s1">historic_CVaR.plot()</span>
+
+<span class="s1">plt.title(</span><span class="s3">'SPY Historic .05 CVaR'</span><span class="s1">)</span>
+<span class="s1">plt.ylabel(</span><span class="s3">'CVaR'</span><span class="s1">)</span>
+<span class="s1">plt.xlabel(</span><span class="s3">'Date'</span><span class="s1">)</span>
+<span class="s1">plt.show()</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (b) 
+</span><span class="s0">#%% 
+</span><span class="s1">round(len(df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">][df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">] &lt; historic_CVaR]) / len(historic_CVaR.dropna())</span><span class="s2">, </span><span class="s4">5</span><span class="s1">)</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (c) 
+- The Historic CVaR is more conservative than the Historic VaR as suspected 
+</span><span class="s0">#%% md 
+</span><span class="s1">- Expanding Volatility Estimates 
+</span><span class="s0">#%% 
+# expanding volatility estimates</span>
+
+<span class="s0">#%% md 
+</span><span class="s1">- Rolling Volatility Estimates 
+</span><span class="s0">#%% 
+# rolling volatility estimates</span>
+
+<span class="s0">#%% md 
+</span><span class="s1">### 4 
+- EWMA 
+</span><span class="s0">#%% 
+</span><span class="s1">IGARCH = arch_model(df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">])</span>
+
+<span class="s1">theta = </span><span class="s4">0.97</span>
+
+<span class="s1">IGARCH.volatility = EWMAVariance(theta)</span>
+
+<span class="s1">IGARCH_model = IGARCH.fit()</span>
+
+<span class="s1">IGARCH_model.params</span>
+<span class="s0">#%% md 
+</span><span class="s1">- GARCH(1,1) 
+</span><span class="s0">#%% 
+</span><span class="s1">GARCH = arch_model(df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">vol=</span><span class="s3">'Garch'</span><span class="s2">, </span><span class="s1">p=</span><span class="s4">1</span><span class="s2">, </span><span class="s1">o=</span><span class="s4">0</span><span class="s2">, </span><span class="s1">q=</span><span class="s4">1</span><span class="s2">, </span><span class="s1">dist=</span><span class="s3">'Normal'</span><span class="s1">)</span>
+
+<span class="s1">GARCH_model = GARCH.fit()</span>
+
+<span class="s1">GARCH_model.params</span>
+<span class="s0">#%% 
+</span><span class="s1">stdev[[</span><span class="s3">'GARCH'</span><span class="s2">,</span><span class="s3">'EWMA'</span><span class="s1">]] = </span><span class="s2">None</span>
+
+<span class="s0">### Initialize with the given parameter</span>
+<span class="s1">stdev.iloc[</span><span class="s4">0</span><span class="s2">,</span><span class="s4">2</span><span class="s1">:] = </span><span class="s4">0.15</span>
+
+<span class="s0">### Simulate the rest of the period using the initial stdev given</span>
+<span class="s2">for </span><span class="s1">i </span><span class="s2">in </span><span class="s1">range(</span><span class="s4">1</span><span class="s2">, </span><span class="s1">len(stdev)):</span>
+    <span class="s0">### Forecast variance by plugging the GARCH and IGARCH parameters into their respective equations</span>
+    <span class="s1">stdev[</span><span class="s3">'EWMA'</span><span class="s1">].iloc[i] = np.sqrt((stdev[</span><span class="s3">'EWMA'</span><span class="s1">].iloc[i-</span><span class="s4">1</span><span class="s1">]**</span><span class="s4">2</span><span class="s1">) * theta \</span>
+                                    <span class="s1">+ (</span><span class="s4">1</span><span class="s1">-theta)*(df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">].iloc[i-</span><span class="s4">1</span><span class="s1">]**</span><span class="s4">2</span><span class="s1">))</span>
+    <span class="s1">stdev[</span><span class="s3">'GARCH'</span><span class="s1">].iloc[i] = np.sqrt(GARCH_model.params[</span><span class="s3">'omega'</span><span class="s1">]\</span>
+                                     <span class="s1">+ (stdev[</span><span class="s3">'GARCH'</span><span class="s1">].iloc[i-</span><span class="s4">1</span><span class="s1">]**</span><span class="s4">2</span><span class="s1">) * GARCH_model.params[</span><span class="s3">'beta[1]'</span><span class="s1">]\</span>
+                                     <span class="s1">+ GARCH_model.params[</span><span class="s3">'alpha[1]'</span><span class="s1">]*(df[</span><span class="s3">r'$\tilde{r}$'</span><span class="s1">].iloc[i-</span><span class="s4">1</span><span class="s1">]**</span><span class="s4">2</span><span class="s1">))</span>
+
+<span class="s1">stdev.dropna(inplace = </span><span class="s2">True</span><span class="s1">)</span>
+
+<span class="s1">stdev[[</span><span class="s3">'GARCH'</span><span class="s2">,</span><span class="s3">'EWMA'</span><span class="s1">]].plot()</span>
+
+<span class="s1">plt.title(</span><span class="s3">'Volatility Forecasts'</span><span class="s1">)</span>
+<span class="s1">plt.ylabel(</span><span class="s3">r'$\sigma_{t}$'</span><span class="s1">)</span>
+<span class="s1">plt.xlabel(</span><span class="s3">'Date'</span><span class="s1">)</span>
+<span class="s1">plt.show()</span>
+<span class="s0">#%% 
+</span><span class="s1">VaR_2 = -</span><span class="s4">1.65 </span><span class="s1">* stdev[[</span><span class="s3">'GARCH'</span><span class="s2">,</span><span class="s3">'EWMA'</span><span class="s1">]]</span>
+<span class="s1">VaR_2.head()</span>
+<span class="s0">#%% 
+</span><span class="s1">VaR_2.plot()</span>
+
+<span class="s1">plt.title(</span><span class="s3">'VaR'</span><span class="s1">)</span>
+<span class="s1">plt.ylabel(</span><span class="s3">'VaR'</span><span class="s1">)</span>
+<span class="s1">plt.xlabel(</span><span class="s3">'Date'</span><span class="s1">)</span>
+<span class="s1">plt.show()</span>
+<span class="s0">#%% 
+</span><span class="s1">freq_df = pd.DataFrame(index = [</span><span class="s3">'Frequency'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">columns = VaR_2.columns)</span>
+
+<span class="s2">for </span><span class="s1">col </span><span class="s2">in </span><span class="s1">freq_df:</span>
+    <span class="s1">freq_df[col] = len(VaR_2[df.loc[VaR_2.index</span><span class="s2">, </span><span class="s3">r'$\tilde{r}$'</span><span class="s1">] &lt; VaR_2[col]]) / len(VaR_2[col].dropna().index)</span>
+
+<span class="s1">round(freq_df</span><span class="s2">, </span><span class="s4">5</span><span class="s1">)</span>
+<span class="s0">#%% md 
+</span><span class="s1">## 3 Estimating Performance 
+### 1 Summary Statistics 
+#### (a) 
+</span><span class="s0">#%% 
+</span><span class="s1">log_df = np.log(</span><span class="s4">1 </span><span class="s1">+ df)</span>
+
+<span class="s1">log_df.head()</span>
+
+<span class="s2">def </span><span class="s1">annualized_stats(data</span><span class="s2">, </span><span class="s1">annual_factor</span><span class="s2">, </span><span class="s1">log = </span><span class="s2">False</span><span class="s1">):</span>
+    <span class="s2">if </span><span class="s1">log == </span><span class="s2">False</span><span class="s1">:</span>
+        <span class="s1">df = pd.DataFrame(data = </span><span class="s2">None,</span>
+                          <span class="s1">index = [</span><span class="s3">r'$r^{M}$'</span><span class="s2">,</span><span class="s3">r'${\tilde{r}^{M}}$'</span><span class="s2">,</span><span class="s3">r'$r^{f}$'</span><span class="s1">])</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">df = pd.DataFrame(data = </span><span class="s2">None,</span>
+                      <span class="s1">index = [</span><span class="s3">r'log $r^{M}$'</span><span class="s2">,</span><span class="s3">r'log ${\tilde{r}^{M}}$'</span><span class="s2">,</span><span class="s3">r'log $r^{f}$'</span><span class="s1">])</span>
+
+    <span class="s1">df[str(data.index[</span><span class="s4">0</span><span class="s1">].year) + </span><span class="s3">'-' </span><span class="s1">+ str(data.index[-</span><span class="s4">1</span><span class="s1">].year) + </span><span class="s3">r' $\mu$'</span><span class="s1">] = [data[</span><span class="s3">'SPX'</span><span class="s1">].mean()</span><span class="s2">,</span>
+                                                                                <span class="s1">data[</span><span class="s3">'SPX'</span><span class="s1">].mean()-data[</span><span class="s3">'TB1M'</span><span class="s1">].mean()</span><span class="s2">,</span>
+                                                                                <span class="s1">data[</span><span class="s3">'TB1M'</span><span class="s1">].mean()]</span>
+
+    <span class="s1">df[str(data.index[</span><span class="s4">0</span><span class="s1">].year) + </span><span class="s3">'-' </span><span class="s1">+ str(data.index[-</span><span class="s4">1</span><span class="s1">].year) + </span><span class="s3">r' $\mu$'</span><span class="s1">] *= annual_factor</span>
+
+    <span class="s1">df[str(data.index[</span><span class="s4">0</span><span class="s1">].year) + </span><span class="s3">'-' </span><span class="s1">+ str(data.index[-</span><span class="s4">1</span><span class="s1">].year) + </span><span class="s3">r' $\sigma$'</span><span class="s1">] = [data[</span><span class="s3">'SPX'</span><span class="s1">].std()</span><span class="s2">,</span>
+                                                                                   <span class="s1">(data[</span><span class="s3">'SPX'</span><span class="s1">]-data[</span><span class="s3">'TB1M'</span><span class="s1">]).std()</span><span class="s2">,</span>
+                                                                                   <span class="s1">data[</span><span class="s3">'TB1M'</span><span class="s1">].std()]</span>
+
+    <span class="s1">df[str(data.index[</span><span class="s4">0</span><span class="s1">].year) + </span><span class="s3">'-' </span><span class="s1">+ str(data.index[-</span><span class="s4">1</span><span class="s1">].year) + </span><span class="s3">r' $\sigma$'</span><span class="s1">] *= np.sqrt(annual_factor)</span>
+
+    <span class="s2">return </span><span class="s1">df</span>
+
+<span class="s2">def </span><span class="s1">join(df_list):</span>
+    <span class="s1">df = df_list[</span><span class="s4">0</span><span class="s1">]</span>
+
+    <span class="s2">for </span><span class="s1">df_ </span><span class="s2">in </span><span class="s1">df_list[</span><span class="s4">1</span><span class="s1">:]:</span>
+        <span class="s1">df = df.join(df_)</span>
+
+    <span class="s2">return </span><span class="s1">df</span>
+
+<span class="s1">stats_ = join([annualized_stats(df.loc[</span><span class="s3">'1965'</span><span class="s1">:</span><span class="s3">'1999'</span><span class="s1">]</span><span class="s2">, </span><span class="s4">12</span><span class="s1">)</span><span class="s2">,</span>
+             <span class="s1">annualized_stats(df.loc[</span><span class="s3">'2000'</span><span class="s1">:]</span><span class="s2">, </span><span class="s4">12</span><span class="s1">)</span><span class="s2">,</span>
+             <span class="s1">annualized_stats(df.loc[</span><span class="s3">'1926'</span><span class="s1">:]</span><span class="s2">, </span><span class="s4">12</span><span class="s1">)])</span>
+
+<span class="s1">log_stats = join([annualized_stats(log_df.loc[</span><span class="s3">'1965'</span><span class="s1">:</span><span class="s3">'1999'</span><span class="s1">]</span><span class="s2">, </span><span class="s4">12</span><span class="s2">, </span><span class="s1">log = </span><span class="s2">True</span><span class="s1">)</span><span class="s2">,</span>
+                 <span class="s1">annualized_stats(log_df.loc[</span><span class="s3">'2000'</span><span class="s1">:]</span><span class="s2">, </span><span class="s4">12</span><span class="s2">, </span><span class="s1">log = </span><span class="s2">True</span><span class="s1">)</span><span class="s2">,</span>
+                 <span class="s1">annualized_stats(log_df.loc[</span><span class="s3">'1926'</span><span class="s1">:]</span><span class="s2">, </span><span class="s4">12</span><span class="s2">, </span><span class="s1">log = </span><span class="s2">True</span><span class="s1">)])</span>
+
+<span class="s1">stats_df = stats_.append(log_stats)</span>
+<span class="s1">stats_df</span>
+
+<span class="s0">#%% md 
+</span><span class="s1">#### (b) 
+- The sub-sample volatility is lower than the full-sample volatility 
+- The average of sub-sample means is the full-sample mean 
+- The volatility for level stats are very similar to the log stats 
+- The mean for the log stats are lower than the mean for the level stats 
+</span><span class="s0">#%% md 
+</span><span class="s1">### 2 
+#### (a) 
+</span><span class="s0">#%% 
+</span><span class="s2">def </span><span class="s1">prob_calc(h</span><span class="s2">, </span><span class="s1">tilde_mu</span><span class="s2">, </span><span class="s1">tilde_sigma):</span>
+    <span class="s2">return </span><span class="s1">stats.norm.cdf(- np.sqrt(h) * tilde_mu / tilde_sigma)</span>
+
+<span class="s2">def </span><span class="s1">prob(h</span><span class="s2">, </span><span class="s1">tilde_mu</span><span class="s2">, </span><span class="s1">tilde_sigma):</span>
+    <span class="s1">prob_df = pd.DataFrame(data = h</span><span class="s2">, </span><span class="s1">columns = [</span><span class="s3">'h'</span><span class="s1">])</span>
+
+    <span class="s1">prob_df[</span><span class="s3">'Probability'</span><span class="s1">] = prob_calc(prob_df[</span><span class="s3">'h'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">tilde_mu</span><span class="s2">, </span><span class="s1">tilde_sigma)</span>
+
+    <span class="s1">prob_df = prob_df.set_index(</span><span class="s3">'h'</span><span class="s1">)</span>
+
+    <span class="s2">return </span><span class="s1">prob_df</span>
+
+<span class="s1">mu_tilde = stats_df.iloc[</span><span class="s4">4</span><span class="s2">, </span><span class="s4">0</span><span class="s1">]</span>
+<span class="s1">sigma_tilde = stats_df.iloc[</span><span class="s4">4</span><span class="s2">, </span><span class="s4">1</span><span class="s1">]</span>
+<span class="s1">h = </span><span class="s4">2022 </span><span class="s1">- </span><span class="s4">1999</span>
+
+<span class="s1">prob([h]</span><span class="s2">, </span><span class="s1">mu_tilde</span><span class="s2">, </span><span class="s1">sigma_tilde)</span>
+<span class="s0">#%% md 
+</span><span class="s1">### (b) 
+</span><span class="s0">#%% 
+</span><span class="s1">prob([</span><span class="s4">15</span><span class="s2">, </span><span class="s4">30</span><span class="s1">]</span><span class="s2">, </span><span class="s1">mu_tilde</span><span class="s2">, </span><span class="s1">sigma_tilde)</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (c) 
+</span><span class="s0">#%% 
+</span><span class="s1">prob_horizon = prob(list(range(</span><span class="s4">1</span><span class="s2">, </span><span class="s4">31</span><span class="s1">))</span><span class="s2">, </span><span class="s1">mu_tilde</span><span class="s2">, </span><span class="s1">sigma_tilde)</span>
+
+<span class="s1">prob_horizon.plot()</span>
+<span class="s1">plt.title(</span><span class="s3">'Probability by Investment Horizon'</span><span class="s1">)</span>
+<span class="s1">plt.ylabel(</span><span class="s3">'Prob. of Shortfall'</span><span class="s1">)</span>
+<span class="s1">plt.show()</span>
+<span class="s0">#%% md 
+</span><span class="s1">### 3 
+</span><span class="s0">#%% 
+</span><span class="s1">log_df1965 = log_df.loc[</span><span class="s3">'1965'</span><span class="s1">:].dropna()</span>
+<span class="s1">mu_tilde = (log_df1965[</span><span class="s3">'SPX'</span><span class="s1">].mean()-log_df1965[</span><span class="s3">'TB1M'</span><span class="s1">].mean()) * </span><span class="s4">12</span>
+<span class="s1">sigma_tilde = (log_df1965[</span><span class="s3">'SPX'</span><span class="s1">]-log_df1965[</span><span class="s3">'TB1M'</span><span class="s1">]).std() * np.sqrt(</span><span class="s4">12</span><span class="s1">)</span>
+
+<span class="s1">prob(list(range(</span><span class="s4">1</span><span class="s2">, </span><span class="s4">31</span><span class="s1">))</span><span class="s2">, </span><span class="s1">mu_tilde</span><span class="s2">, </span><span class="s1">sigma_tilde)</span>
+<span class="s0">#%% md 
+</span><span class="s1">### 4 
+#### (a) 
+</span><span class="s0">#%% 
+</span><span class="s1">mu = stats_df.iloc[</span><span class="s4">3</span><span class="s2">,</span><span class="s4">0</span><span class="s1">]</span>
+<span class="s1">bar_r = stats_df.iloc[</span><span class="s4">3</span><span class="s2">,</span><span class="s4">2</span><span class="s1">]</span>
+<span class="s1">sigma = stats_df.iloc[</span><span class="s4">3</span><span class="s2">,</span><span class="s4">1</span><span class="s1">]</span>
+
+<span class="s1">prob([</span><span class="s4">23</span><span class="s1">]</span><span class="s2">, </span><span class="s1">mu - bar_r</span><span class="s2">, </span><span class="s1">sigma)</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (b) 
+</span><span class="s0">#%% 
+</span><span class="s1">strike = np.log(</span><span class="s4">1.06</span><span class="s1">)</span>
+
+<span class="s1">mu65 = log_df1965[</span><span class="s3">'SPX'</span><span class="s1">].mean() * </span><span class="s4">12</span>
+
+<span class="s1">sigma65 = log_df1965[</span><span class="s3">'SPX'</span><span class="s1">].std() * np.sqrt(</span><span class="s4">12</span><span class="s1">)</span>
+
+<span class="s1">mu = </span><span class="s4">23</span><span class="s1">/</span><span class="s4">7 </span><span class="s1">* (stats_df.iloc[</span><span class="s4">3</span><span class="s2">, </span><span class="s4">2</span><span class="s1">] - strike) + mu65 - strike</span>
+
+<span class="s1">prob([</span><span class="s4">7</span><span class="s1">]</span><span class="s2">, </span><span class="s1">mu</span><span class="s2">, </span><span class="s1">sigma65)</span></pre>
+</body>
+</html>
