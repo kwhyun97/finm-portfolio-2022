@@ -1,0 +1,346 @@
+<html>
+<head>
+<title>FINM36700_2022_HW_7.ipynb</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+FINM36700_2022_HW_7.ipynb</font>
+</center></td></tr></table>
+<pre><span class="s0">#%% md 
+</span><span class="s1"># Homework 7 
+ 
+### FINM 36700 
+### Group C 14 
+ 
+## Imports 
+</span><span class="s0">#%% 
+</span><span class="s2">import </span><span class="s1">pandas </span><span class="s2">as </span><span class="s1">pd</span>
+<span class="s2">import </span><span class="s1">numpy </span><span class="s2">as </span><span class="s1">np</span>
+<span class="s2">import </span><span class="s1">matplotlib.pyplot </span><span class="s2">as </span><span class="s1">plt</span>
+<span class="s2">import </span><span class="s1">statsmodels.api </span><span class="s2">as </span><span class="s1">sm</span>
+<span class="s2">from </span><span class="s1">arch </span><span class="s2">import </span><span class="s1">arch_model</span>
+<span class="s2">from </span><span class="s1">arch.univariate </span><span class="s2">import </span><span class="s1">GARCH</span><span class="s2">, </span><span class="s1">EWMAVariance</span>
+<span class="s2">from </span><span class="s1">sklearn </span><span class="s2">import </span><span class="s1">linear_model</span>
+<span class="s2">import </span><span class="s1">scipy.stats </span><span class="s2">as </span><span class="s1">stats</span>
+<span class="s2">from </span><span class="s1">statsmodels.regression.rolling </span><span class="s2">import </span><span class="s1">RollingOLS</span>
+<span class="s2">import </span><span class="s1">seaborn </span><span class="s2">as </span><span class="s1">sns</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+<span class="s1">warnings.filterwarnings(</span><span class="s3">&quot;ignore&quot;</span><span class="s1">)</span>
+<span class="s1">pd.set_option(</span><span class="s3">&quot;display.precision&quot;</span><span class="s2">, </span><span class="s4">4</span><span class="s1">)</span>
+<span class="s1">sns.set(rc={</span><span class="s3">'figure.figsize'</span><span class="s1">:(</span><span class="s4">15</span><span class="s2">, </span><span class="s4">10</span><span class="s1">)})</span>
+<span class="s0">#%% md 
+</span><span class="s1">## Data 
+</span><span class="s0">#%% 
+</span><span class="s1">df = pd.read_excel(</span><span class="s3">'../data/gmo_analysis_data.xlsx'</span><span class="s2">, </span><span class="s1">sheet_name=</span><span class="s4">1</span><span class="s1">)</span>
+<span class="s1">df = df.rename(columns={</span><span class="s3">&quot;Unnamed: 0&quot;</span><span class="s1">: </span><span class="s3">&quot;Date&quot;</span><span class="s1">})</span>
+<span class="s1">df = df.set_index(</span><span class="s3">&quot;Date&quot;</span><span class="s1">).dropna()</span>
+
+<span class="s1">df.head()</span>
+<span class="s0">#%% 
+</span><span class="s1">rf = pd.read_excel(</span><span class="s3">'../data/gmo_analysis_data.xlsx'</span><span class="s2">, </span><span class="s1">sheet_name=</span><span class="s4">3</span><span class="s1">)</span>
+<span class="s1">rf = rf.rename(columns={</span><span class="s3">&quot;Unnamed: 0&quot;</span><span class="s1">: </span><span class="s3">&quot;Date&quot;</span><span class="s1">})</span>
+<span class="s1">rf.set_index(</span><span class="s3">&quot;Date&quot;</span><span class="s2">, </span><span class="s1">inplace = </span><span class="s2">True</span><span class="s1">)</span>
+
+<span class="s1">rf.head()</span>
+<span class="s0">#%% 
+</span><span class="s1">GMO = pd.read_excel(</span><span class="s3">'../data/gmo_analysis_data.xlsx'</span><span class="s2">, </span><span class="s1">sheet_name=</span><span class="s4">2</span><span class="s1">)</span>
+
+<span class="s1">GMO = GMO.rename(columns={</span><span class="s3">&quot;Unnamed: 0&quot;</span><span class="s1">: </span><span class="s3">&quot;Date&quot;</span><span class="s1">})</span>
+<span class="s1">GMO.set_index(</span><span class="s3">&quot;Date&quot;</span><span class="s2">, </span><span class="s1">inplace = </span><span class="s2">True</span><span class="s1">)</span>
+
+<span class="s1">GMO_ex = GMO.dropna().subtract(rf[</span><span class="s3">'US3M'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">axis=</span><span class="s4">0</span><span class="s1">).dropna()</span>
+
+<span class="s1">GMO_ex.head()</span>
+<span class="s0">#%% md 
+</span><span class="s1">## 2. Analyzing GMO 
+ 
+### 2 - 1. 
+</span><span class="s0">#%% 
+# helper function</span>
+<span class="s2">def </span><span class="s1">summary_stats(df</span><span class="s2">, </span><span class="s1">annual_fac = </span><span class="s4">12</span><span class="s1">):</span>
+    <span class="s1">stats_df = pd.DataFrame(data = </span><span class="s2">None</span><span class="s1">)</span>
+    <span class="s1">stats_df[</span><span class="s3">'Mean'</span><span class="s1">] = df.mean()*annual_fac</span>
+    <span class="s1">stats_df[</span><span class="s3">'Vol'</span><span class="s1">] = df.std()*np.sqrt(annual_fac)</span>
+    <span class="s1">stats_df[</span><span class="s3">'Sharpe'</span><span class="s1">] = df.mean()/df.std()*np.sqrt(annual_fac)</span>
+
+    <span class="s2">return </span><span class="s1">stats_df</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats(GMO_ex.loc[:</span><span class="s3">'2011'</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'GMWAX'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats(GMO_ex.loc[</span><span class="s3">'2012'</span><span class="s1">:</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'GMWAX'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats(GMO_ex[[</span><span class="s3">'GMWAX'</span><span class="s1">]])</span>
+<span class="s0">#%% md 
+</span><span class="s1">- The mean, volatility, and Sharpe ratio has changed a lot since the case. GMO's performance from 2012 and further is much better than the period before. 
+ 
+### 2 - 2. 
+</span><span class="s0">#%% 
+# helper function</span>
+<span class="s2">def </span><span class="s1">tail_risk(df):</span>
+    <span class="s1">tr_df = pd.DataFrame(data = </span><span class="s2">None</span><span class="s1">)</span>
+    <span class="s1">tr_df[</span><span class="s3">'Min return'</span><span class="s1">] = df.min()</span>
+    <span class="s1">tr_df[</span><span class="s3">'VaR-5th'</span><span class="s1">] = df.quantile(</span><span class="s4">.05</span><span class="s1">)</span>
+    <span class="s1">cum_ret = (</span><span class="s4">1 </span><span class="s1">+ df).cumprod()</span>
+    <span class="s1">rolling_max = cum_ret.cummax()</span>
+    <span class="s1">drawdown = (cum_ret - rolling_max) / rolling_max</span>
+    <span class="s1">tr_df[</span><span class="s3">'Max Drawdown'</span><span class="s1">] = drawdown.min()</span>
+
+    <span class="s2">return </span><span class="s1">tr_df</span>
+<span class="s0">#%% 
+</span><span class="s1">tail_risk(GMO_ex.loc[:</span><span class="s3">'2011'</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'GMWAX'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">tail_risk(GMO_ex.loc[:</span><span class="s3">'2011'</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'SPY'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">tail_risk(GMO_ex.loc[</span><span class="s3">'2012'</span><span class="s1">:</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'GMWAX'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">tail_risk(GMO_ex.loc[</span><span class="s3">'2012'</span><span class="s1">:</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'SPY'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">tail_risk(GMO_ex[[</span><span class="s3">'GMWAX'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">tail_risk(GMO_ex[[</span><span class="s3">'SPY'</span><span class="s1">]])</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (a): 
+- GMWAX has lower tail-risk than SPY as seen by these stats. Also, this applies to all three samples. Therefore, GMWAX in general has lower tail-risk across all time period. 
+ 
+#### (b): 
+- Yes, GMWAX's tail-risk does vary much across the two subsamples. It has lower VaR in the second subsample which is indicated as the year of 2012 and forward. Also, the Max Drawdown is much lower in the second subsample. Thus, GMWAX improves substantially in the second subsample 
+ 
+### 2 - 3. 
+</span><span class="s0">#%% 
+# helper functino</span>
+<span class="s2">def </span><span class="s1">reg_params(df</span><span class="s2">, </span><span class="s1">y_col</span><span class="s2">, </span><span class="s1">X_col</span><span class="s2">, </span><span class="s1">intercept = </span><span class="s2">True, </span><span class="s1">annual_fac=</span><span class="s4">12</span><span class="s1">):</span>
+    <span class="s1">y = df[y_col]</span>
+    <span class="s2">if </span><span class="s1">intercept == </span><span class="s2">True</span><span class="s1">:</span>
+        <span class="s1">X = sm.add_constant(df[X_col])</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">X = df[X_col]</span>
+
+    <span class="s1">model = sm.OLS(y</span><span class="s2">, </span><span class="s1">X</span><span class="s2">, </span><span class="s1">missing = </span><span class="s3">'drop'</span><span class="s1">).fit()</span>
+    <span class="s1">reg_df = model.params.to_frame(</span><span class="s3">'Regression Parameters'</span><span class="s1">)</span>
+    <span class="s1">reg_df.loc[</span><span class="s3">r'$R^{2}$'</span><span class="s1">] = model.rsquared</span>
+
+    <span class="s2">if </span><span class="s1">intercept == </span><span class="s2">True</span><span class="s1">:</span>
+        <span class="s1">reg_df.loc[</span><span class="s3">'const'</span><span class="s1">] *= annual_fac</span>
+
+    <span class="s2">return </span><span class="s1">reg_df</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (a): 
+</span><span class="s0">#%% 
+</span><span class="s1">reg_params(GMO_ex.loc[:</span><span class="s3">'2011'</span><span class="s1">]</span><span class="s2">, </span><span class="s3">'GMWAX'</span><span class="s2">, </span><span class="s3">'SPY'</span><span class="s1">)</span>
+<span class="s0">#%% 
+</span><span class="s1">reg_params(GMO_ex.loc[</span><span class="s3">'2012'</span><span class="s1">:]</span><span class="s2">, </span><span class="s3">'GMWAX'</span><span class="s2">, </span><span class="s3">'SPY'</span><span class="s1">)</span>
+<span class="s0">#%% 
+</span><span class="s1">reg_params(GMO_ex</span><span class="s2">, </span><span class="s3">'GMWAX'</span><span class="s2">, </span><span class="s3">'SPY'</span><span class="s1">)</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (b): 
+- GMWAS is a low-beta strategy. The beta has not changed that much since the case, so we could say that it is a low-beta strategy across all samples and periods. 
+ 
+#### (c): 
+- GMWAX does not provide alpha, because the alpha or the constant is negative. That has not changed since the case. The alpha is negative across all samples and periods. 
+ 
+## 3. Forecasting Regression 
+### 3 - 1. 
+</span><span class="s0">#%% 
+</span><span class="s1">df = df.shift()</span>
+<span class="s1">df[</span><span class="s3">'SPY'</span><span class="s1">] = GMO[</span><span class="s3">'SPY'</span><span class="s1">]</span>
+
+<span class="s1">df.head()</span>
+<span class="s0">#%% 
+</span><span class="s1">DP = reg_params(df</span><span class="s2">, </span><span class="s3">'SPY'</span><span class="s2">, </span><span class="s3">'DP'</span><span class="s1">)</span>
+
+<span class="s1">DP</span>
+<span class="s0">#%% 
+</span><span class="s1">EP = reg_params(df</span><span class="s2">, </span><span class="s3">'SPY'</span><span class="s2">, </span><span class="s3">'EP'</span><span class="s1">)</span>
+
+<span class="s1">EP</span>
+<span class="s0">#%% 
+</span><span class="s1">EP_DP_10Y = reg_params(df</span><span class="s2">, </span><span class="s3">'SPY'</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'EP'</span><span class="s2">,</span><span class="s3">'DP'</span><span class="s2">,</span><span class="s3">'US10Y'</span><span class="s1">])</span>
+
+<span class="s1">EP_DP_10Y</span>
+<span class="s0">#%% md 
+</span><span class="s1">### 3 - 2. 
+</span><span class="s0">#%% 
+# scaling</span>
+<span class="s1">w_DP = </span><span class="s4">100 </span><span class="s1">* (DP.loc[</span><span class="s3">'const'</span><span class="s1">][</span><span class="s4">0</span><span class="s1">]/</span><span class="s4">12 </span><span class="s1">+ DP.loc[</span><span class="s3">'DP'</span><span class="s1">][</span><span class="s4">0</span><span class="s1">] * df[</span><span class="s3">'DP'</span><span class="s1">])</span>
+
+<span class="s1">r_DP = (w_DP * df[</span><span class="s3">'SPY'</span><span class="s1">]).dropna()</span>
+
+<span class="s1">w_EP = </span><span class="s4">100 </span><span class="s1">* (EP.loc[</span><span class="s3">'const'</span><span class="s1">][</span><span class="s4">0</span><span class="s1">]/</span><span class="s4">12 </span><span class="s1">+ EP.loc[</span><span class="s3">'EP'</span><span class="s1">][</span><span class="s4">0</span><span class="s1">] * df[</span><span class="s3">'EP'</span><span class="s1">])</span>
+
+<span class="s1">r_EP = (w_EP * df[</span><span class="s3">'SPY'</span><span class="s1">]).dropna()</span>
+
+<span class="s1">w_3fac = </span><span class="s4">100 </span><span class="s1">* (EP_DP_10Y.loc[</span><span class="s3">'const'</span><span class="s1">][</span><span class="s4">0</span><span class="s1">]/</span><span class="s4">12 </span><span class="s1">+ EP_DP_10Y.loc[</span><span class="s3">'EP'</span><span class="s1">][</span><span class="s4">0</span><span class="s1">] * df[</span><span class="s3">'EP'</span><span class="s1">]\</span>
+                                             <span class="s1">+ EP_DP_10Y.loc[</span><span class="s3">'DP'</span><span class="s1">][</span><span class="s4">0</span><span class="s1">] * df[</span><span class="s3">'DP'</span><span class="s1">]\</span>
+                                             <span class="s1">+ EP_DP_10Y.loc[</span><span class="s3">'US10Y'</span><span class="s1">][</span><span class="s4">0</span><span class="s1">] * df[</span><span class="s3">'US10Y'</span><span class="s1">])</span>
+
+<span class="s1">r_3fac = (w_3fac * df[</span><span class="s3">'SPY'</span><span class="s1">]).dropna()</span>
+<span class="s0">#%% 
+# helper function</span>
+<span class="s2">def </span><span class="s1">summary_stats_bm(series</span><span class="s2">, </span><span class="s1">bm</span><span class="s2">, </span><span class="s1">annual_fac=</span><span class="s4">12</span><span class="s1">):</span>
+    <span class="s1">ss_df = pd.DataFrame(data = </span><span class="s2">None, </span><span class="s1">index = [</span><span class="s3">'Summary Stats'</span><span class="s1">])</span>
+    <span class="s1">ss_df[</span><span class="s3">'Mean'</span><span class="s1">] = series.mean() * annual_fac</span>
+    <span class="s1">ss_df[</span><span class="s3">'Vol'</span><span class="s1">] = series.std() * np.sqrt(annual_fac)</span>
+    <span class="s1">ss_df[</span><span class="s3">'Sharpe (Mean/Vol)'</span><span class="s1">] = ss_df[</span><span class="s3">'Mean'</span><span class="s1">] / ss_df[</span><span class="s3">'Vol'</span><span class="s1">]</span>
+
+    <span class="s1">y = series</span>
+    <span class="s1">X = sm.add_constant(bm.loc[series.index])</span>
+    <span class="s1">reg = sm.OLS(y</span><span class="s2">,</span><span class="s1">X).fit().params</span>
+    <span class="s1">ss_df[</span><span class="s3">r'$\alpha$'</span><span class="s1">] = reg[</span><span class="s4">0</span><span class="s1">] * annual_fac</span>
+    <span class="s1">ss_df[</span><span class="s3">r'$\beta^{SPY}$'</span><span class="s1">] = reg[</span><span class="s4">1</span><span class="s1">]</span>
+
+    <span class="s1">cum_ret = (</span><span class="s4">1 </span><span class="s1">+ series).cumprod()</span>
+    <span class="s1">rolling_max = cum_ret.cummax()</span>
+    <span class="s1">drawdown = (cum_ret - rolling_max) / rolling_max</span>
+    <span class="s1">ss_df[</span><span class="s3">'Max Drawdown'</span><span class="s1">] = drawdown.min()</span>
+
+    <span class="s2">return </span><span class="s1">round(ss_df</span><span class="s2">, </span><span class="s4">4</span><span class="s1">)</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats_bm(r_DP</span><span class="s2">, </span><span class="s1">df[[</span><span class="s3">'SPY'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats_bm(r_EP</span><span class="s2">, </span><span class="s1">df[[</span><span class="s3">'SPY'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats_bm(r_3fac</span><span class="s2">, </span><span class="s1">df[[</span><span class="s3">'SPY'</span><span class="s1">]])</span>
+<span class="s0">#%% md 
+</span><span class="s1">### 3 - 3. 
+#### (a): 
+</span><span class="s0">#%% 
+</span><span class="s1">VaR = pd.DataFrame([r_DP.quantile(</span><span class="s4">.05</span><span class="s1">)</span><span class="s2">, </span><span class="s1">r_EP.quantile(</span><span class="s4">.05</span><span class="s1">)</span><span class="s2">, </span><span class="s1">r_3fac.quantile(</span><span class="s4">.05</span><span class="s1">)</span><span class="s2">,</span>
+                    <span class="s1">df[</span><span class="s3">'SPY'</span><span class="s1">].quantile(</span><span class="s4">.05</span><span class="s1">)</span><span class="s2">,</span>
+                    <span class="s1">GMO[</span><span class="s3">'GMWAX'</span><span class="s1">].quantile(</span><span class="s4">.05</span><span class="s1">)]</span><span class="s2">,</span>
+                   <span class="s1">index = [</span><span class="s3">'DP Strat'</span><span class="s2">,</span><span class="s3">'EP Strat'</span><span class="s2">,</span><span class="s3">'3-factor Strat'</span><span class="s2">,</span><span class="s3">'SPY'</span><span class="s2">,</span><span class="s3">'GMO'</span><span class="s1">]</span><span class="s2">,</span>
+                   <span class="s1">columns = [</span><span class="s3">'5% VaR'</span><span class="s1">])</span>
+
+<span class="s1">VaR</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (b): 
+</span><span class="s0">#%% 
+</span><span class="s1">summary_stats(r_DP.to_frame(</span><span class="s3">'DP Strat'</span><span class="s1">).loc[</span><span class="s3">'2000'</span><span class="s1">:</span><span class="s3">'2011'</span><span class="s1">])</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats(r_EP.to_frame(</span><span class="s3">'EP Strat'</span><span class="s1">).loc[</span><span class="s3">'2000'</span><span class="s1">:</span><span class="s3">'2011'</span><span class="s1">])</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats(r_3fac.to_frame(</span><span class="s3">'3-factor Strat'</span><span class="s1">).loc[</span><span class="s3">'2000'</span><span class="s1">:</span><span class="s3">'2011'</span><span class="s1">])</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats(rf.loc[</span><span class="s3">'2000'</span><span class="s1">:</span><span class="s3">'2011'</span><span class="s1">])</span>
+<span class="s0">#%% md 
+</span><span class="s1">- All the dynamic strategies outperform the risk-free rate during this period. 
+ 
+#### (c): 
+</span><span class="s0">#%% 
+</span><span class="s1">r_df = r_3fac.to_frame(</span><span class="s3">'3-factor Strat'</span><span class="s1">)</span>
+<span class="s1">r_df[</span><span class="s3">'DP Strat'</span><span class="s1">] = r_DP</span>
+<span class="s1">r_df[</span><span class="s3">'EP Strat'</span><span class="s1">] = r_EP</span>
+<span class="s1">r_df[</span><span class="s3">'rf'</span><span class="s1">] = rf[</span><span class="s3">'US3M'</span><span class="s1">]</span>
+
+<span class="s1">df_riskprem = pd.DataFrame(data=</span><span class="s2">None, </span><span class="s1">index=[</span><span class="s3">r'% of periods underperforming $r^{f}$'</span><span class="s1">])</span>
+<span class="s2">for </span><span class="s1">col </span><span class="s2">in </span><span class="s1">r_df.columns[:</span><span class="s4">3</span><span class="s1">]:</span>
+    <span class="s1">df_riskprem[col] = len(r_df[r_df[col] &lt; r_df[</span><span class="s3">'rf'</span><span class="s1">]])/len(r_df) * </span><span class="s4">100</span>
+
+<span class="s1">df_riskprem</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (d): 
+- No, judging by the tail risk metrics and volatility compared to SPY, the dynamic strategy does not seem to take on extra risk on the whole. 
+ 
+- However, we must keep in mind that the strategies are dependent on running regressions with very little prediction power, so badly estimated parameters could lead to terrible performance. (Fortunately, this was not the case in our backtesting since we did not observe high volatility or tail risk) 
+ 
+## 4 Out-of-Sample Forecasting 
+</span><span class="s0">#%% 
+# helper function</span>
+<span class="s2">def </span><span class="s1">OOS_r2(df</span><span class="s2">, </span><span class="s1">factors</span><span class="s2">, </span><span class="s1">start):</span>
+    <span class="s1">y = df[</span><span class="s3">'SPY'</span><span class="s1">]</span>
+    <span class="s1">X = sm.add_constant(df[factors])</span>
+
+    <span class="s1">forecast_err</span><span class="s2">, </span><span class="s1">null_err = []</span><span class="s2">, </span><span class="s1">[]</span>
+
+    <span class="s2">for </span><span class="s1">i</span><span class="s2">,</span><span class="s1">j </span><span class="s2">in </span><span class="s1">enumerate(df.index):</span>
+        <span class="s2">if </span><span class="s1">i &gt;= start:</span>
+            <span class="s1">currX = X.iloc[:i]</span>
+            <span class="s1">currY = y.iloc[:i]</span>
+            <span class="s1">reg = sm.OLS(currY</span><span class="s2">, </span><span class="s1">currX</span><span class="s2">, </span><span class="s1">missing = </span><span class="s3">'drop'</span><span class="s1">).fit()</span>
+            <span class="s1">null_forecast = currY.mean()</span>
+            <span class="s1">reg_predict = reg.predict(X.iloc[[i]])</span>
+            <span class="s1">actual = y.iloc[[i]]</span>
+            <span class="s1">forecast_err.append(reg_predict - actual)</span>
+            <span class="s1">null_err.append(null_forecast - actual)</span>
+
+    <span class="s1">RSS = (np.array(forecast_err)**</span><span class="s4">2</span><span class="s1">).sum()</span>
+    <span class="s1">TSS = (np.array(null_err)**</span><span class="s4">2</span><span class="s1">).sum()</span>
+
+    <span class="s2">return </span><span class="s4">1 </span><span class="s1">- RSS/TSS</span>
+<span class="s0">#%% md 
+</span><span class="s1">###  4 - 1. 
+</span><span class="s0">#%% 
+</span><span class="s1">EP_OOS_r2 = OOS_r2(df</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'EP'</span><span class="s1">]</span><span class="s2">, </span><span class="s4">60</span><span class="s1">)</span>
+
+<span class="s1">print(</span><span class="s3">'EP OOS R-squared: ' </span><span class="s1">+ str(round(EP_OOS_r2</span><span class="s2">, </span><span class="s4">4</span><span class="s1">)))</span>
+<span class="s0">#%% md 
+</span><span class="s1">- No the $R^2$ value is negative 
+ 
+### 4 - 2 
+</span><span class="s0">#%% 
+</span><span class="s2">def </span><span class="s1">OOS_strat(df</span><span class="s2">, </span><span class="s1">factors</span><span class="s2">, </span><span class="s1">start</span><span class="s2">, </span><span class="s1">weight):</span>
+    <span class="s1">returns = []</span>
+    <span class="s1">y = df[</span><span class="s3">'SPY'</span><span class="s1">]</span>
+    <span class="s1">X = sm.add_constant(df[factors])</span>
+
+    <span class="s2">for </span><span class="s1">i</span><span class="s2">,</span><span class="s1">j </span><span class="s2">in </span><span class="s1">enumerate(df.index):</span>
+        <span class="s2">if </span><span class="s1">i &gt;= start:</span>
+            <span class="s1">currX = X.iloc[:i]</span>
+            <span class="s1">currY = y.iloc[:i]</span>
+            <span class="s1">reg = sm.OLS(currY</span><span class="s2">, </span><span class="s1">currX</span><span class="s2">, </span><span class="s1">missing = </span><span class="s3">'drop'</span><span class="s1">).fit()</span>
+            <span class="s1">pred = reg.predict(X.iloc[[i]])</span>
+            <span class="s1">w = pred * weight</span>
+            <span class="s1">returns.append((df.iloc[i][</span><span class="s3">'SPY'</span><span class="s1">] * w)[</span><span class="s4">0</span><span class="s1">])</span>
+
+    <span class="s1">df_strat = pd.DataFrame(data = returns</span><span class="s2">, </span><span class="s1">index = df.iloc[-(len(returns)):].index</span><span class="s2">, </span><span class="s1">columns = [</span><span class="s3">'Strat Returns'</span><span class="s1">])</span>
+    <span class="s2">return </span><span class="s1">df_strat</span>
+<span class="s0">#%% 
+</span><span class="s1">OOS_EP = OOS_strat(df</span><span class="s2">, </span><span class="s1">[</span><span class="s3">'EP'</span><span class="s1">]</span><span class="s2">, </span><span class="s4">60</span><span class="s2">, </span><span class="s4">100</span><span class="s1">)</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats_bm(OOS_EP[</span><span class="s3">'Strat Returns'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">GMO[[</span><span class="s3">'SPY'</span><span class="s1">]])</span>
+<span class="s0">#%% md 
+</span><span class="s1">- Compared to the in-sample version in Q3.2, this strategy under-performs in terms of the expected return and the Sharpe ratio of the portfolio. Though the Max draw-down is less than the DP regression strategy, it is not much less than all 3 strategies. Therefore, even in terms of risk, this strategy does not seem to be significantly better either. (We cannot rule with certainty on this with only this summary statistics) 
+ 
+### 4 - 3 
+#### (a): 
+</span><span class="s0">#%% 
+</span><span class="s1">VaR_OOS = pd.DataFrame([OOS_EP[</span><span class="s3">'Strat Returns'</span><span class="s1">].quantile(</span><span class="s4">.05</span><span class="s1">)</span><span class="s2">,</span>
+                    <span class="s1">df[</span><span class="s3">'SPY'</span><span class="s1">].quantile(</span><span class="s4">.05</span><span class="s1">)</span><span class="s2">,</span>
+                    <span class="s1">GMO[</span><span class="s3">'GMWAX'</span><span class="s1">].quantile(</span><span class="s4">.05</span><span class="s1">)]</span><span class="s2">,</span>
+                   <span class="s1">index = [</span><span class="s3">'EP Strat'</span><span class="s2">,</span><span class="s3">'SPY'</span><span class="s2">,</span><span class="s3">'GMO'</span><span class="s1">]</span><span class="s2">,</span>
+                   <span class="s1">columns = [</span><span class="s3">'5% VaR'</span><span class="s1">])</span>
+
+<span class="s1">VaR_OOS</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (b): 
+</span><span class="s0">#%% 
+</span><span class="s1">summary_stats_bm(OOS_EP.loc[</span><span class="s3">'2000'</span><span class="s1">:</span><span class="s3">'2011'</span><span class="s1">][</span><span class="s3">'Strat Returns'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">GMO[[</span><span class="s3">'SPY'</span><span class="s1">]])</span>
+<span class="s0">#%% 
+</span><span class="s1">summary_stats(rf.loc[</span><span class="s3">'2000'</span><span class="s1">:</span><span class="s3">'2011'</span><span class="s1">])</span>
+<span class="s0">#%% md 
+</span><span class="s1">- The dynamic strategy barely overperforms the risk-free rate in terms of premium. 
+ 
+#### (c): 
+</span><span class="s0">#%% 
+</span><span class="s1">r_df_OOS = OOS_EP.rename(columns={</span><span class="s3">&quot;Strat Returns&quot;</span><span class="s1">: </span><span class="s3">&quot;EP Strat&quot;</span><span class="s1">})</span>
+<span class="s1">r_df_OOS[</span><span class="s3">'rf'</span><span class="s1">] = rf[</span><span class="s3">'US3M'</span><span class="s1">]</span>
+
+<span class="s1">df_riskprem2 = pd.DataFrame(data=</span><span class="s2">None, </span><span class="s1">index=[</span><span class="s3">r'% of periods underperforming $r^{f}$'</span><span class="s1">])</span>
+<span class="s2">for </span><span class="s1">col </span><span class="s2">in </span><span class="s1">r_df_OOS.columns[:</span><span class="s4">3</span><span class="s1">]:</span>
+    <span class="s1">df_riskprem2[col] = len(r_df_OOS[r_df_OOS[col] &lt; r_df_OOS[</span><span class="s3">'rf'</span><span class="s1">]])/len(r_df_OOS) * </span><span class="s4">100</span>
+
+<span class="s1">df_riskprem2</span>
+<span class="s0">#%% md 
+</span><span class="s1">#### (d): 
+- The dynamic strategy tends to have worse risk metrics than SPY so it seems this strategy does take on extra risk.</span></pre>
+</body>
+</html>
