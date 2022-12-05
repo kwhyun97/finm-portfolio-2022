@@ -63,6 +63,30 @@ def performance_summary(return_data):
 """
 This code was part of FINM Portfolio 2022 HW1 Solutions
 """
+def mvo_performance_stats(asset_returns, cov_matrix, port_weights, port_type, period):
+    """
+        Returns the Annualized Performance Stats for given asset returns, portfolio weights and covariance matrix
+        Inputs:
+            asset_return - Excess return over the risk free rate for each asset (n x 1) Vector
+            cov_matrix = nxn covariance matrix for the assets
+            port_weights = weights of the assets in the portfolio (1 x n) Vector
+            port_type = Type of Portfolio | Eg - Tangency or Mean-Variance Portfolio
+            period = Monthly frequency
+    """
+
+    ret = np.dot(port_weights, asset_returns)
+    vol = np.sqrt(port_weights @ cov_matrix @ port_weights.T) * np.sqrt(period)
+    sharpe = ret / vol
+
+    stats = pd.DataFrame([[ret, vol, sharpe]],
+                         columns=["Annualized Return", "Annualized Volatility", "Annualized Sharpe Ratio"],
+                         index=[port_type])
+    return stats
+
+
+"""
+This code was part of FINM Portfolio 2022 HW1 Solutions
+"""
 def tangency_portfolio_rfr(asset_return,cov_matrix, cov_diagnolize = False):
     """
         Returns the tangency portfolio weights in a (1 x n) vector
