@@ -177,7 +177,7 @@ def regression_based_performance(factor,fund_ret,rf,constant = True):
         Returns the Regression based performance Stats for given set of returns and factors
         Inputs:
             factor - Dataframe containing monthly returns of the regressors
-            fund_ret - Dataframe containing monthly excess returns of the regressand fund
+            fund_ret - Dataframe containing monthly excess returns of the regress and fund
             rf - Monthly risk free rate of return
             constant - whether you allow constant for the regression
         Output:
@@ -196,7 +196,7 @@ def regression_based_performance(factor,fund_ret,rf,constant = True):
 
     else:
         beta = model.params
-    treynor_ratio = ((fund_ret.values-rf.values).mean()*12)/beta[0]
+    treynor_ratio = ((fund_ret.values-rf).mean()*12)/beta[0]
     tracking_error = (model.resid.std()*np.sqrt(12))
     if constant:
         information_ratio = model.params[0]*12/tracking_error
